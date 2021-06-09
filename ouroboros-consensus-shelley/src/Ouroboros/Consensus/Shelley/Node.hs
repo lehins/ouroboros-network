@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeApplications         #-}
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE TypeOperators            #-}
+{-# LANGUAGE UndecidableInstances     #-}
 {-# LANGUAGE UndecidableSuperClasses  #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -41,7 +42,7 @@ module Ouroboros.Consensus.Shelley.Node (
   , validateGenesis
   ) where
 
-import           Control.Monad.Except (Except)
+import           Control.Monad.Except
 import           Data.Bifunctor (first)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -405,7 +406,9 @@ instance ShelleyBasedEra era => BlockSupportsMetrics (ShelleyBlock era) where
          SelfIssued    -> IsSelfIssued
          NotSelfIssued -> IsNotSelfIssued
 
-instance ShelleyBasedEra era => RunNode (ShelleyBlock era)
+instance ( SerialiseNodeToClientConstraints (ShelleyBlock era)
+         , ShelleyBasedEra era
+         ) => RunNode (ShelleyBlock era)
 
 {-------------------------------------------------------------------------------
   Register genesis staking
