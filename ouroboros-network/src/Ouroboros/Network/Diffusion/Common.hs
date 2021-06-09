@@ -1,15 +1,36 @@
+{-# LANGUAGE DataKinds #-}
 -- Common things between P2P and NonP2P Diffusion modules
 
 module Ouroboros.Network.Diffusion.Common
-  ( DiffusionInitializationTracer(..)
-  , DiffusionFailure(..)
+  ( DiffusionAddress (..)
+  , DiffusionApplications (..)
+  , DiffusionInitializationTracer (..)
+  , DiffusionFailure (..)
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
-import Ouroboros.Network.NodeToClient (LocalAddress)
-import Network.Socket (SockAddr)
-import Ouroboros.Network.Snocket (FileDescriptor)
 import Control.Exception (SomeException, Exception)
+
+import           Data.List.NonEmpty (NonEmpty)
+import           Data.Void (Void)
+import           Data.ByteString.Lazy (ByteString)
+
+import           Network.Socket (SockAddr, AddrInfo)
+import qualified Network.Socket as Socket
+
+import           Ouroboros.Network.Mux
+import           Ouroboros.Network.NodeToClient (LocalAddress)
+import           Ouroboros.Network.NodeToClient.Version
+                   ( NodeToClientVersion
+                   , NodeToClientVersionData
+                   )
+import           Ouroboros.Network.NodeToNode (RemoteAddress)
+import           Ouroboros.Network.NodeToNode.Version
+                   ( NodeToNodeVersion
+                   , NodeToNodeVersionData
+                   , DiffusionMode
+                   )
+import           Ouroboros.Network.Protocol.Handshake.Version
+import           Ouroboros.Network.Snocket (FileDescriptor)
 
 
 -- TODO: use LocalAddress where appropriate rather than 'path'.
@@ -47,3 +68,52 @@ data DiffusionFailure = UnsupportedLocalSocketType
 
 instance Exception DiffusionFailure
 
+data DiffusionAddress = DiffusionAddress {
+    daIPv4Address  :: Maybe (Either Socket.Socket AddrInfo)
+    -- ^ an @IPv4@ socket ready to accept connections or an @IPv4@ addresses
+  , daIPv6Address  :: Maybe (Either Socket.Socket AddrInfo)
+    -- ^ an @IPV4@ socket ready to accept connections or an @IPv6@ addresses
+  , daLocalAddress :: Maybe (Either Socket.Socket FilePath)
+    -- ^ an @AF_UNIX@ socket ready to accept connections or an @AF_UNIX@
+    -- socket path
+  }
+
+
+data DiffusionApplications m =
+    DiffusionApplications {
+
+      -- | NodeToNode initiator applications for initiator only mode.
+      --
+      -- TODO: we should accept one or the other, but not both:
+      -- 'daApplicationInitiatorMode', 'daApplicationInitiatorResponderMode'.
+      --
+      daApplicationInitiatorMode
+        :: Versions NodeToNodeVersion
+                    NodeToNodeVersionData
+                    (OuroborosBundle
+                      InitiatorMode RemoteAddress
+                      ByteString m () Void)
+
+      -- | NodeToNode initiator & responder applications for bidirectional mode.
+      --
+    , daApplicationInitiatorResponderMode
+        :: Versions NodeToNodeVersion
+                    NodeToNodeVersionData
+                    (OuroborosBundle
+                      InitiatorResponderMode RemoteAddress
+                      ByteString m () ())
+
+
+    -- | NodeToClient responder application (server role)
+    --
+    , daLocalResponderApplication
+        :: Versions NodeToClientVersion
+                    NodeToClientVersionData
+                    (OuroborosApplication
+                      ResponderMode LocalAddress
+                      ByteString m Void ())
+
+    -- | Diffusion mode.
+    --
+    , daDiffusionMode :: DiffusionMode
+    }

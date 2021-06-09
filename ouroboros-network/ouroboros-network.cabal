@@ -63,7 +63,7 @@ library
                        Ouroboros.Network.BlockFetch.State
                        Ouroboros.Network.Counter
                        Ouroboros.Network.DeltaQ
-                       Ouroboros.Network.Diffusion
+                       -- Ouroboros.Network.Diffusion
                        Ouroboros.Network.Diffusion.Policies
                        Ouroboros.Network.KeepAlive
                        Ouroboros.Network.Magic

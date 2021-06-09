@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
@@ -30,10 +31,9 @@ import           Data.Functor (void)
 import           Data.Maybe (maybeToList)
 import           Data.Foldable (asum)
 import           Data.Void (Void)
-import           Data.ByteString.Lazy (ByteString)
 
 import           Network.Mux (MuxTrace (..), WithMuxBearer (..))
-import           Network.Socket (AddrInfo, SockAddr)
+import           Network.Socket (SockAddr)
 import qualified Network.Socket as Socket
 
 import           Ouroboros.Network.Snocket ( LocalAddress
@@ -49,15 +49,10 @@ import           Ouroboros.Network.Protocol.Handshake.Version
 import           Ouroboros.Network.ErrorPolicy
 import           Ouroboros.Network.IOManager
 import           Ouroboros.Network.Mux
-import           Ouroboros.Network.NodeToClient ( NodeToClientVersion (..)
-                                                , NodeToClientVersionData )
 import qualified Ouroboros.Network.NodeToClient as NodeToClient
-import           Ouroboros.Network.NodeToNode ( NodeToNodeVersion (..)
-                                              , NodeToNodeVersionData
-                                              , AcceptedConnectionsLimit (..)
+import           Ouroboros.Network.NodeToNode ( AcceptedConnectionsLimit (..)
                                               , AcceptConnectionsPolicyTrace (..)
                                               , DiffusionMode (..)
-                                              , RemoteAddress
                                               )
 import qualified Ouroboros.Network.NodeToNode   as NodeToNode
 import           Ouroboros.Network.PeerSelection.LedgerPeers ( LedgerPeersConsensusInterface (..)
@@ -72,7 +67,7 @@ import           Ouroboros.Network.Subscription.Ip
 import           Ouroboros.Network.Subscription.Dns
 import           Ouroboros.Network.Subscription.Worker (LocalAddresses (..))
 import           Ouroboros.Network.Tracers
-import           Ouroboros.Network.Diffusion.Common (DiffusionInitializationTracer (..))
+import           Ouroboros.Network.Diffusion.Common
 
 data DiffusionTracers = DiffusionTracers {
       dtIpSubscriptionTracer   :: Tracer IO (WithIPList (SubscriptionTrace SockAddr))
@@ -117,79 +112,84 @@ nullTracers = DiffusionTracers {
 -- | Network Node argumets
 --
 data DiffusionArguments = DiffusionArguments {
-      daIPv4Address  :: Maybe (Either Socket.Socket AddrInfo)
-      -- ^ IPv4 socket ready to accept connections or diffusion addresses
-    , daIPv6Address  :: Maybe (Either Socket.Socket AddrInfo)
-      -- ^ IPV4 socket ready to accept connections or diffusion addresses
-    , daLocalAddress :: Maybe (Either Socket.Socket FilePath)
-      -- ^ AF_UNIX socket ready to accept connections or address for local clients
-    , daIpProducers   :: IPSubscriptionTarget
+      daIpProducers   :: IPSubscriptionTarget
       -- ^ ip subscription addresses
     , daDnsProducers  :: [DnsSubscriptionTarget]
       -- ^ list of domain names to subscribe to
     , daAcceptedConnectionsLimit :: AcceptedConnectionsLimit
       -- ^ parameters for limiting number of accepted connections
-    , daDiffusionMode :: DiffusionMode
-      -- ^ run in initiator only mode
-    }
-
-data DiffusionApplications ntnAddr ntcAddr ntnVersionData ntcVersionData m = DiffusionApplications {
-
-      daResponderApplication      :: Versions
-                                       NodeToNodeVersion
-                                       ntnVersionData
-                                       (OuroborosApplication
-                                         ResponderMode ntnAddr
-                                         ByteString m Void ())
-      -- ^ NodeToNode reposnder application (server role)
-
-    , daInitiatorApplication      :: Versions
-                                       NodeToNodeVersion
-                                       ntnVersionData
-                                       (OuroborosApplication
-                                         InitiatorMode ntnAddr
-                                         ByteString m () Void)
-      -- ^ NodeToNode initiator application (client role)
-
-    , daLocalResponderApplication :: Versions
-                                       NodeToClientVersion
-                                       ntcVersionData
-                                       (OuroborosApplication
-                                         ResponderMode ntcAddr
-                                         ByteString m Void ())
-      -- ^ NodeToClient responder applicaton (server role)
 
     , daErrorPolicies :: ErrorPolicies
       -- ^ error policies
-
-    ,  daLedgerPeersCtx :: LedgerPeersConsensusInterface m
-      -- ^ Interface used to get peers from the current ledger.
     }
 
-data DiffusionFailure = UnsupportedLocalSocketType
-                      | UnsupportedReadySocket -- Windows only
-  deriving (Eq, Show)
 
-instance Exception DiffusionFailure
+mkApp
+    :: OuroborosBundle      mode addr bs m a b
+    -> OuroborosApplication mode addr bs m a b
+mkApp bundle =
+    OuroborosApplication $ \connId controlMessageSTM ->
+      foldMap (\p -> p connId controlMessageSTM) bundle
+
+
+mkInitiatorApp
+    :: OuroborosBundle      InitiatorResponderMode addr bs m a b
+    -> OuroborosApplication InitiatorMode          addr bs m a Void
+mkInitiatorApp bundle =
+    OuroborosApplication $ \connId controlMessageSTM ->
+      foldMap (\p -> map f $ p connId controlMessageSTM) bundle
+  where
+    f :: MiniProtocol InitiatorResponderMode bs m a b
+      -> MiniProtocol InitiatorMode          bs m a Void
+    f MiniProtocol { miniProtocolNum
+                   , miniProtocolLimits
+                   , miniProtocolRun = InitiatorAndResponderProtocol  initiator
+                                                                     _responder
+                   } =
+      MiniProtocol { miniProtocolNum
+                   , miniProtocolLimits
+                   , miniProtocolRun = InitiatorProtocolOnly initiator
+                   }
+
+
+
+mkResponderApp
+    :: OuroborosBundle      InitiatorResponderMode addr bs m a    b
+    -> OuroborosApplication ResponderMode          addr bs m Void b
+mkResponderApp bundle =
+    OuroborosApplication $ \connId controlMessageSTM ->
+      foldMap (\p -> map f $ p connId controlMessageSTM) bundle
+  where
+    f :: MiniProtocol InitiatorResponderMode bs m a    b
+      -> MiniProtocol ResponderMode          bs m Void b
+    f MiniProtocol { miniProtocolNum
+                   , miniProtocolLimits
+                   , miniProtocolRun = InitiatorAndResponderProtocol _initiator
+                                                                      responder
+                   } =
+      MiniProtocol { miniProtocolNum
+                   , miniProtocolLimits
+                   , miniProtocolRun = ResponderProtocolOnly responder
+                   }
+
 
 runDataDiffusion
     :: DiffusionTracers
+    -> DiffusionAddress
     -> DiffusionArguments
-    -> DiffusionApplications
-         RemoteAddress LocalAddress
-         NodeToNodeVersionData NodeToClientVersionData
-         IO
+    -> DiffusionApplications IO
     -> IO ()
 runDataDiffusion tracers
-                 DiffusionArguments { daIPv4Address
+                 DiffusionAddress   { daIPv4Address
                                     , daIPv6Address
                                     , daLocalAddress
-                                    , daIpProducers
+                                    }
+                 DiffusionArguments { daIpProducers
                                     , daDnsProducers
                                     , daAcceptedConnectionsLimit
-                                    , daDiffusionMode
+                                    , daErrorPolicies
                                     }
-                 applications@DiffusionApplications { daErrorPolicies } =
+                 applications =
   traceException . withIOManager $ \iocp -> do
     let -- snocket for remote communication.
         snocket :: SocketSnocket
@@ -207,7 +207,7 @@ runDataDiffusion tracers
         dnsSubActions = runDnsSubscriptionWorker snocket networkState lias
           <$> daDnsProducers
 
-        serverActions = case daDiffusionMode of
+        serverActions = case daDiffusionMode applications of
           InitiatorAndResponderDiffusionMode ->
             runServer snocket networkState . fmap Socket.addrAddress
               <$> addresses
@@ -433,7 +433,7 @@ runDataDiffusion tracers
             networkState
             daAcceptedConnectionsLimit
             sd
-            (daResponderApplication applications)
+            (mkResponderApp <$> daApplicationInitiatorResponderMode applications)
             remoteErrorPolicy
         )
     runIpSubscriptionWorker :: SocketSnocket
@@ -454,7 +454,7 @@ runDataDiffusion tracers
         , spErrorPolicies          = remoteErrorPolicy
         , spSubscriptionTarget     = daIpProducers
         }
-      (daInitiatorApplication applications)
+      (mkInitiatorApp <$> daApplicationInitiatorResponderMode applications)
 
     runDnsSubscriptionWorker :: SocketSnocket
                              -> NetworkMutableState SockAddr
@@ -476,5 +476,5 @@ runDataDiffusion tracers
         , spErrorPolicies          = remoteErrorPolicy
         , spSubscriptionTarget     = dnsProducer
         }
-      (daInitiatorApplication applications)
+      (mkApp <$> daApplicationInitiatorMode applications)
 
