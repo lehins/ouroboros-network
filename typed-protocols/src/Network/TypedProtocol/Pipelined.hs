@@ -7,6 +7,7 @@
 {-# LANGUAGE PolyKinds          #-}
 {-# LANGUAGE RankNTypes         #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators      #-}
 {-# LANGUAGE ViewPatterns       #-}
 
 module Network.TypedProtocol.Pipelined
@@ -67,7 +68,10 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
                  ->    PeerSender ps pr st n c m a
 
   -- | Same idea as normal 'Peer' 'Done'.
-  SenderDone     :: !(NobodyHasAgency st)
+  SenderDone     :: (RelativeAgencyEq (StateAgency st)
+                                       NobodyHasAgency
+                                      (Relative pr (StateAgency st)))
+                 -> TokState ps st
                  -> a
                  -> PeerSender ps pr st Z c m a
 
@@ -79,7 +83,9 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- The @n ~ 'Z'@ constraint provides the type level guarantees that there
   -- are no outstanding pipelined responses.
   --
-  SenderYield    :: !(WeHaveAgency pr st)
+  SenderYield    :: (RelativeAgencyEq (StateAgency st)
+                                       WeHaveAgency
+                                      (Relative pr (StateAgency st)))
                  -> Message    ps st st'
                  -> PeerSender ps pr st' Z c m a
                  -> PeerSender ps pr st  Z c m a
@@ -92,7 +98,9 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- The @n ~ 'Z'@ constraint provides the type level guarantees that there
   -- are no outstanding pipelined responses.
   --
-  SenderAwait    :: !(TheyHaveAgency pr st)
+  SenderAwait    :: (RelativeAgencyEq (StateAgency st)
+                                       TheyHaveAgency
+                                      (Relative pr (StateAgency st)))
                  -> (forall st'. Message    ps st st'
                               -> PeerSender ps pr st' Z c m a)
                  -> PeerSender              ps pr st  Z c m a
@@ -107,7 +115,9 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- The type records the fact that the number of outstanding pipelined
   -- responses increases by one.
   --
-  SenderPipeline :: !(WeHaveAgency   pr st)
+  SenderPipeline :: (RelativeAgencyEq (StateAgency st)
+                                       WeHaveAgency
+                                      (Relative pr (StateAgency st)))
                  -> Message ps st st'
                  -> PeerReceiver ps pr (st'  :: ps) (st'' :: ps) m c
                  -> PeerSender   ps pr (st'' :: ps) (S n) c m a
@@ -144,7 +154,9 @@ data PeerReceiver ps (pr :: PeerRole) (st :: ps) (stdone :: ps) m c where
 
   ReceiverDone   :: c -> PeerReceiver ps pr stdone stdone m c
 
-  ReceiverAwait  :: !(TheyHaveAgency pr st)
+  ReceiverAwait  :: (RelativeAgencyEq (StateAgency st)
+                                       TheyHaveAgency
+                                      (Relative pr (StateAgency st)))
                  -> (forall st'. Message ps st st'
                               -> PeerReceiver ps pr st' stdone m c)
                  -> PeerReceiver ps pr st stdone m c

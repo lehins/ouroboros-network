@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeInType #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE EmptyCase #-}
 
 -- | Actions for running 'Peer's with a 'Driver'
@@ -65,15 +66,19 @@ import Control.Monad.Class.MonadFork
 -- Driver interface
 --
 
-data Driver ps dstate m =
+data Driver ps (pr :: PeerRole) dstate m =
         Driver {
-          sendMessage :: forall (pr :: PeerRole) (st :: ps) (st' :: ps).
-                         PeerHasAgency pr st
+          sendMessage :: forall (st :: ps) (st' :: ps).
+                         (RelativeAgencyEq (StateAgency st)
+                                            WeHaveAgency
+                                           (Relative pr (StateAgency st)))
                       -> Message ps st st'
                       -> m ()
 
-        , recvMessage :: forall (pr :: PeerRole) (st :: ps).
-                         PeerHasAgency pr st
+        , recvMessage :: forall (st :: ps).
+                         (RelativeAgencyEq (StateAgency st)
+                                            TheyHaveAgency
+                                           (Relative pr (StateAgency st)))
                       -> dstate
                       -> m (SomeMessage st, dstate)
 
@@ -100,7 +105,7 @@ data SomeMessage (st :: ps) where
 runPeerWithDriver
   :: forall ps (st :: ps) pr dstate m a.
      Monad m
-  => Driver ps dstate m
+  => Driver ps pr dstate m
   -> Peer ps pr st m a
   -> dstate
   -> m (a, dstate)
@@ -112,7 +117,7 @@ runPeerWithDriver Driver{sendMessage, recvMessage} =
        -> Peer ps pr st' m a
        -> m (a, dstate)
     go dstate (Effect k) = k >>= go dstate
-    go dstate (Done _ x) = return (x, dstate)
+    go dstate (Done _ _ x) = return (x, dstate)
 
     go dstate (Yield stok msg k) = do
       sendMessage stok msg
@@ -150,7 +155,7 @@ runPeerWithDriver Driver{sendMessage, recvMessage} =
 runPipelinedPeerWithDriver
   :: forall ps (st :: ps) pr dstate m a.
      MonadAsync m
-  => Driver ps dstate m
+  => Driver ps pr dstate m
   -> PeerPipelined ps pr st m a
   -> dstate
   -> m (a, dstate)
@@ -230,7 +235,7 @@ runPipelinedPeerSender
      )
   => TQueue m (ReceiveHandler dstate ps pr m c)
   -> TQueue m (c, dstate)
-  -> Driver ps dstate m
+  -> Driver ps pr dstate m
   -> PeerSender ps pr st Z c m a
   -> dstate
   -> m (a, dstate)
@@ -246,8 +251,8 @@ runPipelinedPeerSender receiveQueue collectQueue
        -> MaybeDState dstate n
        -> PeerSender ps pr st' n c m a
        -> m (a, dstate)
-    go n    dstate             (SenderEffect k) = k >>= go n dstate
-    go Zero (HasDState dstate) (SenderDone _ x) = return (x, dstate)
+    go n    dstate             (SenderEffect k)   = k >>= go n dstate
+    go Zero (HasDState dstate) (SenderDone _ _ x) = return (x, dstate)
 
     go Zero dstate (SenderYield stok msg k) = do
       sendMessage stok msg
@@ -285,7 +290,7 @@ runPipelinedPeerReceiverQueue
      )
   => TQueue m (ReceiveHandler dstate ps pr m c)
   -> TQueue m (c, dstate)
-  -> Driver ps dstate m
+  -> Driver ps pr dstate m
   -> m Void
 runPipelinedPeerReceiverQueue receiveQueue collectQueue
                               driver@Driver{startDState} = do
@@ -308,7 +313,7 @@ runPipelinedPeerReceiverQueue receiveQueue collectQueue
 runPipelinedPeerReceiver
   :: forall ps (st :: ps) (stdone :: ps) pr dstate m c.
      Monad m
-  => Driver ps dstate m
+  => Driver ps pr dstate m
   -> dstate
   -> PeerReceiver ps pr (st :: ps) (stdone :: ps) m c
   -> m (c, dstate)
