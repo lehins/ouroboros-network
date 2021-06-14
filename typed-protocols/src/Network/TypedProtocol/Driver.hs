@@ -117,7 +117,7 @@ runPeerWithDriver Driver{sendMessage, recvMessage} =
        -> Peer ps pr st' m a
        -> m (a, dstate)
     go dstate (Effect k) = k >>= go dstate
-    go dstate (Done _ _ x) = return (x, dstate)
+    go dstate (Done _ x) = return (x, dstate)
 
     go dstate (Yield stok msg k) = do
       sendMessage stok msg
@@ -252,7 +252,7 @@ runPipelinedPeerSender receiveQueue collectQueue
        -> PeerSender ps pr st' n c m a
        -> m (a, dstate)
     go n    dstate             (SenderEffect k)   = k >>= go n dstate
-    go Zero (HasDState dstate) (SenderDone _ _ x) = return (x, dstate)
+    go Zero (HasDState dstate) (SenderDone _ x) = return (x, dstate)
 
     go Zero dstate (SenderYield stok msg k) = do
       sendMessage stok msg

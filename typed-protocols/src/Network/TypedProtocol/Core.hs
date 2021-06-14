@@ -25,6 +25,7 @@ module Network.TypedProtocol.Core (
   -- * Defining protocols
   -- $defining
   Protocol(..),
+  SPingPong(..),
   -- $lemmas
 
   -- * Engaging in protocols
@@ -46,12 +47,18 @@ module Network.TypedProtocol.Core (
   exclusionLemmaWeHaveAgencyAndNobodyHasAgency_1,
   exclusionLemmaWeHaveAgencyAndNobodyHasAgency_2,
   exclusionLemmaTheyHaveAgencyAndNobodyHasAgency_1,
-  exclusionLemmaTheyHaveAgencyAndNobodyHasAgency_2
+  exclusionLemmaTheyHaveAgencyAndNobodyHasAgency_2,
+
+  -- * Example
+  PingPong(..),
+  Message(..),
+  pingPongClient
   ) where
 
 import Data.Kind (Type)
--- import Data.Type.Equality
 import Data.Void (Void)
+
+import Data.Singletons
 
 -- $intro
 -- A typed protocol between two peers is defined via a state machine: a
@@ -338,11 +345,6 @@ class Protocol ps where
   --
   data Message ps (st :: ps) (st' :: ps)
 
-  -- | Singletons for protocol states.  It is enough to provide singletons
-  -- for terminal states.
-  --
-  data TokState ps (st :: ps)
-
   -- | Associate an 'Agency' for each state.
   --
   type StateAgency (st :: ps) :: Agency
@@ -533,10 +535,10 @@ data Peer ps (pr :: PeerRole) (st :: ps) m a where
   -- >        MsgDone
   -- >       (Done ReflNobodyAgency TokDone result)
   --
-  Done   :: (RelativeAgencyEq (StateAgency st)
+  Done   :: SingI st
+         => (RelativeAgencyEq (StateAgency st)
                                NobodyHasAgency
                               (Relative pr (StateAgency st)))
-         -> TokState ps st
          -> a
          -> Peer ps pr st m a
 
@@ -548,7 +550,8 @@ data Peer ps (pr :: PeerRole) (st :: ps) m a where
   --
   -- > Yield ReflClientAgency MsgPing $ ...
   --
-  Yield  :: (RelativeAgencyEq (StateAgency st)
+  Yield  :: SingI st
+         => (RelativeAgencyEq (StateAgency st)
                                WeHaveAgency
                               (Relative pr (StateAgency st)))
          -> Message ps st st'
@@ -572,7 +575,8 @@ data Peer ps (pr :: PeerRole) (st :: ps) m a where
   -- >   MsgDone -> ...
   -- >   MsgPing -> ...
   --
-  Await  :: (RelativeAgencyEq (StateAgency st)
+  Await  :: SingI st 
+         => (RelativeAgencyEq (StateAgency st)
                                TheyHaveAgency
                               (Relative pr (StateAgency st)))
          -> (forall st'. Message ps st st' -> Peer ps pr st' m a)
@@ -581,13 +585,14 @@ data Peer ps (pr :: PeerRole) (st :: ps) m a where
 
 deriving instance Functor m => Functor (Peer ps (pr :: PeerRole) (st :: ps) m)
 
-
-{-
+--
+-- TODO: remove
+--
 
 data PingPong where
-    StIdle :: PingPong
-    StBusy :: PingPong
-    StDone :: PingPong
+  StIdle :: PingPong
+  StBusy :: PingPong
+  StDone :: PingPong
 
 instance Protocol PingPong where
     data Message PingPong st st' where
@@ -595,18 +600,56 @@ instance Protocol PingPong where
       MsgPong :: Message PingPong StBusy StIdle
       MsgDone :: Message PingPong StIdle StDone
 
-    data TokState PingPong st where
-      TokIdle :: TokState PingPong StIdle
-      TokBusy :: TokState PingPong StBusy
-      TokDone :: TokState PingPong StDone
-
     type StateAgency StIdle = ClientAgency
     type StateAgency StBusy = ServerAgency
     type StateAgency StDone = NobodyAgency
 
-clientPingPong :: Peer PingPong AsClient StIdle m ()
-clientPingPong = Yield ReflClientAgency MsgPing
-               $ Await ReflServerAgency $ \MsgPong -> 
-                 Yield ReflClientAgency MsgDone
-               $ Done  ReflNobodyAgency TokDone ()
--}
+
+data SPingPong (st :: PingPong) where
+  SingIdle :: SPingPong StIdle
+  SingBusy :: SPingPong StBusy
+  SingDone :: SPingPong StDone
+
+deriving instance Show (SPingPong st)
+
+type instance Sing = SPingPong
+instance SingI StIdle where
+    sing = SingIdle
+instance SingI StBusy where
+    sing = SingBusy
+instance SingI StDone where
+    sing = SingDone
+
+-- | This couldn't be any simpler!
+--
+pingPongClient :: Peer PingPong AsClient StIdle m ()
+pingPongClient = yield MsgPing
+               $ await $ \MsgPong ->
+                 yield MsgDone
+               $ done  ()
+  where
+    -- 'yield', 'await', and 'done' should be defined as pattern synonyms in
+    -- `Network.TypedProtocol.Core.Client' \/
+    -- 'Network.TypedProtocol.Core.Server' modules.
+    yield :: ( StateAgency st ~ ClientAgency
+             , SingI st
+             )
+          => Message ps st st'
+          -> Peer ps AsClient st' m a
+          -> Peer ps AsClient st m a
+    yield = Yield ReflClientAgency
+
+    await :: ( StateAgency st ~ ServerAgency
+             , SingI st
+             )
+          => (forall st'. Message ps st st'
+               -> Peer ps AsClient st' m a)
+          -> Peer ps AsClient st m a
+    await = Await ReflServerAgency
+
+    done :: ( StateAgency st ~ NobodyAgency
+            , SingI st
+            )
+         => a
+         -> Peer ps AsClient st m a
+    done = Done ReflNobodyAgency

@@ -23,6 +23,7 @@ module Network.TypedProtocol.Pipelined
   ) where
 
 import           Unsafe.Coerce (unsafeCoerce)
+import           Data.Singletons
 
 import           Network.TypedProtocol.Core
 
@@ -68,10 +69,10 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
                  ->    PeerSender ps pr st n c m a
 
   -- | Same idea as normal 'Peer' 'Done'.
-  SenderDone     :: (RelativeAgencyEq (StateAgency st)
+  SenderDone     :: SingI st
+                 => (RelativeAgencyEq (StateAgency st)
                                        NobodyHasAgency
                                       (Relative pr (StateAgency st)))
-                 -> TokState ps st
                  -> a
                  -> PeerSender ps pr st Z c m a
 
@@ -83,7 +84,8 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- The @n ~ 'Z'@ constraint provides the type level guarantees that there
   -- are no outstanding pipelined responses.
   --
-  SenderYield    :: (RelativeAgencyEq (StateAgency st)
+  SenderYield    :: SingI st
+                 => (RelativeAgencyEq (StateAgency st)
                                        WeHaveAgency
                                       (Relative pr (StateAgency st)))
                  -> Message    ps st st'
@@ -98,7 +100,8 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- The @n ~ 'Z'@ constraint provides the type level guarantees that there
   -- are no outstanding pipelined responses.
   --
-  SenderAwait    :: (RelativeAgencyEq (StateAgency st)
+  SenderAwait    :: SingI st
+                 => (RelativeAgencyEq (StateAgency st)
                                        TheyHaveAgency
                                       (Relative pr (StateAgency st)))
                  -> (forall st'. Message    ps st st'
@@ -115,7 +118,8 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- The type records the fact that the number of outstanding pipelined
   -- responses increases by one.
   --
-  SenderPipeline :: (RelativeAgencyEq (StateAgency st)
+  SenderPipeline :: SingI st
+                 => (RelativeAgencyEq (StateAgency st)
                                        WeHaveAgency
                                       (Relative pr (StateAgency st)))
                  -> Message ps st st'
@@ -141,7 +145,8 @@ data PeerSender ps (pr :: PeerRole) (st :: ps) (n :: Outstanding) c m a where
   -- outstanding pipelined responses decreases by one. The type also guarantees
   -- that it can only be used when there is at least one outstanding response.
   --
-  SenderCollect  :: Maybe (PeerSender ps pr (st :: ps) (S n) c m a)
+  SenderCollect  :: SingI st
+                 => Maybe (PeerSender ps pr (st :: ps) (S n) c m a)
                  -> (c ->  PeerSender ps pr (st :: ps)    n  c m a)
                  ->        PeerSender ps pr (st :: ps) (S n) c m a
 
@@ -152,9 +157,11 @@ data PeerReceiver ps (pr :: PeerRole) (st :: ps) (stdone :: ps) m c where
   ReceiverEffect :: m (PeerReceiver ps pr st stdone m c)
                  ->    PeerReceiver ps pr st stdone m c
 
-  ReceiverDone   :: c -> PeerReceiver ps pr stdone stdone m c
+  ReceiverDone   :: SingI stdone
+                 => c -> PeerReceiver ps pr stdone stdone m c
 
-  ReceiverAwait  :: (RelativeAgencyEq (StateAgency st)
+  ReceiverAwait  :: SingI st
+                 => (RelativeAgencyEq (StateAgency st)
                                        TheyHaveAgency
                                       (Relative pr (StateAgency st)))
                  -> (forall st'. Message ps st st'
