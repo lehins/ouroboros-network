@@ -29,7 +29,7 @@ module Ouroboros.Consensus.Shelley.Ledger.Mempool (
   , perTxOverhead
   ) where
 
-import           Control.Monad.Except (Except)
+import           Control.Monad.Except (Except, throwError)
 import           Control.Monad.Identity (Identity (..))
 import           Data.Foldable (toList)
 import           Data.Typeable (Typeable)
@@ -52,7 +52,7 @@ import qualified Cardano.Ledger.Era as SL (Crypto, TxInBlock, TxSeq, fromTxSeq)
 import qualified Shelley.Spec.Ledger.API as SL
 import qualified Shelley.Spec.Ledger.UTxO as SL (txid)
 
-import           Ouroboros.Consensus.Shelley.Eras (EraCrypto)
+import           Ouroboros.Consensus.Shelley.Eras (EraCrypto, scriptsWereOK)
 import           Ouroboros.Consensus.Shelley.Ledger.Block
 import           Ouroboros.Consensus.Shelley.Ledger.Ledger
 
@@ -197,6 +197,7 @@ instance Show (GenTxId (ShelleyBlock era)) where
 applyShelleyTx :: forall era.
      ShelleyBasedEra era
   => LedgerConfig (ShelleyBlock era)
+  -> WhetherToForgive
   -> SlotNo
   -> GenTx (ShelleyBlock era)
   -> TickedLedgerState (ShelleyBlock era)
@@ -204,13 +205,18 @@ applyShelleyTx :: forall era.
        ( TickedLedgerState (ShelleyBlock era)
        , Validated (GenTx (ShelleyBlock era))
        )
-applyShelleyTx cfg slot (ShelleyTx _ tx) st = do
+applyShelleyTx cfg wtf slot (ShelleyTx _ tx) st = do
     (mempoolState', vtx) <-
        SL.applyTx
          (shelleyLedgerGlobals cfg)
          (SL.mkMempoolEnv   innerSt slot)
          (SL.mkMempoolState innerSt)
          tx
+
+    case wtf of
+      DoForgive | not (scriptsWereOK @era Proxy vtx) ->
+        throwError $ SL.ApplyTxError []   -- TODO what to put in this list?
+      _ -> pure ()
 
     let st' = set theLedgerLens mempoolState' st
 

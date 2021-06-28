@@ -102,6 +102,7 @@ instance CanHardFork xs => LedgerSupportsMempool (HardForkBlock xs) where
       $ applyHelper
           ModeReapply
           cfg
+          DoNotForgive
           slot
           (WrapValidatedGenTx vtx)
           tls
@@ -143,6 +144,7 @@ data ApplyResult xs blk = ApplyResult {
 applyHelper :: forall xs txIn. CanHardFork xs
   => ApplyHelperMode txIn
   -> LedgerConfig (HardForkBlock xs)
+  -> WhetherToForgive
   -> SlotNo
   -> txIn (HardForkBlock xs)
   -> TickedLedgerState (HardForkBlock xs)
@@ -153,6 +155,7 @@ applyHelper :: forall xs txIn. CanHardFork xs
       )
 applyHelper mode
             HardForkLedgerConfig{..}
+            wtf
             slot
             tx
             (TickedHardForkLedgerState transition hardForkState) =
@@ -235,7 +238,7 @@ applyHelper mode
         $ do
             let lcfg = unwrapLedgerConfig cfg
             (st', vtx) <- case mode of
-              ModeApply   -> applyTx lcfg slot tx' st
+              ModeApply   -> applyTx lcfg wtf slot tx' st
               ModeReapply -> do
                   let vtx' = unwrapValidatedGenTx tx'
                   st' <- reapplyTx lcfg slot vtx' st

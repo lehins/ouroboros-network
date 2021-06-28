@@ -92,17 +92,18 @@ implTryAddTxs
      -- transaction.
   -> Tracer m (TraceEventMempool blk)
      -- ^ The tracer.
+  -> WhetherToForgive
   -> [GenTx blk]
      -- ^ The list of transactions to add to the mempool.
   -> m ([MempoolAddTxResult blk], [GenTx blk])
-implTryAddTxs istate cfg txSize trcr =
+implTryAddTxs istate cfg txSize trcr wtf =
     go []
   where
     go acc = \case
       []     -> pure (reverse acc, [])
       tx:txs -> join $ atomically $ do
         is <- readTVar istate
-        case pureTryAddTxs cfg txSize tx is of
+        case pureTryAddTxs cfg txSize wtf tx is of
           NoSpaceLeft             -> pure $ pure (reverse acc, tx:txs)
           TryAddTxs is' result ev -> do
             whenJust is' (writeTVar istate)
@@ -121,12 +122,13 @@ pureTryAddTxs
      -- ^ The ledger configuration.
   -> (GenTx blk -> TxSizeInBytes)
      -- ^ The function to claculate the size of a transaction.
+  -> WhetherToForgive
   -> GenTx blk
      -- ^ The transaction to add to the mempool.
   -> InternalState blk
      -- ^ The current internal state of the mempool.
   -> TryAddTxs blk
-pureTryAddTxs cfg txSize tx is
+pureTryAddTxs cfg txSize wtf tx is
   | let size    = txSize tx
         curSize = msNumBytes  $ isMempoolSize is
   , curSize + size > getMempoolCapacityBytes (isCapacity is)
@@ -157,7 +159,7 @@ pureTryAddTxs cfg txSize tx is
                (isMempoolSize is)
               )
     where
-      (eVtx, vr) = extendVRNew cfg txSize tx $ validationResultFromIS is
+      (eVtx, vr) = extendVRNew cfg txSize wtf tx $ validationResultFromIS is
       is'        = internalStateFromVR vr
 
 -- | A datatype containing the state resulting after removing the requested

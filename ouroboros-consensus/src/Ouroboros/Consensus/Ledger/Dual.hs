@@ -540,6 +540,7 @@ type instance ApplyTxErr (DualBlock m a) = DualGenTxErr m a
 
 instance Bridge m a => LedgerSupportsMempool (DualBlock m a) where
   applyTx DualLedgerConfig{..}
+          wtf
           slot
           DualGenTx{..}
           TickedDualLedgerState{..} = do
@@ -547,11 +548,13 @@ instance Bridge m a => LedgerSupportsMempool (DualBlock m a) where
         agreeOnError DualGenTxErr (
             applyTx
               dualLedgerConfigMain
+              wtf
               slot
               dualGenTxMain
               tickedDualLedgerStateMain
           , applyTx
               dualLedgerConfigAux
+              wtf
               slot
               dualGenTxAux
               tickedDualLedgerStateAux
