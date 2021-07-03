@@ -65,10 +65,10 @@ import           Ouroboros.Consensus.Util.IOLike
 -- same result whether they process transactions one by one or all in one go, so
 -- this equality holds:
 --
--- > void (tryAddTxs wtf txs) === forM_ txs (tryAddTxs wtf . (:[]))
--- > void (trAddTxs wtf [x,y]) === tryAddTxs wtf x >> void (tryAddTxs wtf y)
+-- > void (tryAddTxs wti txs) === forM_ txs (tryAddTxs wti . (:[]))
+-- > void (trAddTxs wti [x,y]) === tryAddTxs wti x >> void (tryAddTxs wti y)
 --
--- This shows that @'tryAddTxs' wtf@ is an homomorphism from '++' and '>>',
+-- This shows that @'tryAddTxs' wti@ is an homomorphism from '++' and '>>',
 -- which informally makes these operations "distributive".
 data Mempool m blk idx = Mempool {
       -- | Add a bunch of transactions (oldest to newest)
@@ -112,7 +112,7 @@ data Mempool m blk idx = Mempool {
       -- > let prj = \case
       -- >       MempoolTxAdded vtx        -> txForgetValidated vtx
       -- >       MempoolTxRejected tx _err -> tx
-      -- > (processed, toProcess) <- tryAddTxs wtf txs
+      -- > (processed, toProcess) <- tryAddTxs wti txs
       -- > map prj processed ++ toProcess == txs
       --
       -- Note that previously valid transaction that are now invalid with
@@ -138,7 +138,7 @@ data Mempool m blk idx = Mempool {
       -- an index of transaction hashes that have been included on the
       -- blockchain.
       --
-      tryAddTxs      :: WhetherToForgive
+      tryAddTxs      :: WhetherToIntervene
                      -> [GenTx blk]
                      -> m ( [MempoolAddTxResult blk]
                           , [GenTx blk]
@@ -237,27 +237,27 @@ addTxs
   => Mempool m blk idx
   -> [GenTx blk]
   -> m [MempoolAddTxResult blk]
-addTxs mempool = addTxsHelper mempool DoNotForgive
+addTxs mempool = addTxsHelper mempool DoNotIntervene
 
 -- | Variation on 'addTxs' that is more forgiving when possible
 --
--- See 'DoForgive'.
+-- See 'Intervene'.
 addLocalTxs
   :: forall m blk idx. MonadSTM m
   => Mempool m blk idx
   -> [GenTx blk]
   -> m [MempoolAddTxResult blk]
-addLocalTxs mempool = addTxsHelper mempool DoForgive
+addLocalTxs mempool = addTxsHelper mempool Intervene
 
 -- | See 'addTxs'
 addTxsHelper
   :: forall m blk idx. MonadSTM m
   => Mempool m blk idx
-  -> WhetherToForgive
+  -> WhetherToIntervene
   -> [GenTx blk]
   -> m [MempoolAddTxResult blk]
-addTxsHelper mempool wtf = \txs -> do
-    (processed, toAdd) <- tryAddTxs mempool wtf txs
+addTxsHelper mempool wti = \txs -> do
+    (processed, toAdd) <- tryAddTxs mempool wti txs
     case toAdd of
       [] -> return processed
       _  -> go [processed] toAdd
@@ -280,7 +280,7 @@ addTxsHelper mempool wtf = \txs -> do
       -- It is possible that between the check above and the call below, other
       -- transactions are added, stealing our spot, but that's fine, we'll
       -- just recurse again without progress.
-      (added, toAdd) <- tryAddTxs mempool wtf txs
+      (added, toAdd) <- tryAddTxs mempool wti txs
       go (added:acc) toAdd
 
 {-------------------------------------------------------------------------------

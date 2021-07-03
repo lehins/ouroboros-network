@@ -116,7 +116,7 @@ instance LedgerSupportsMempool ByronBlock where
     where
       tx' = toMempoolPayload tx
 
-  applyTx cfg _wtf slot tx st =
+  applyTx cfg _wti slot tx st =
           (\st' -> (st', ValidatedByronTx tx))
       <$> applyByronGenTx validationMode cfg slot tx st
     where

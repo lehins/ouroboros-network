@@ -197,7 +197,7 @@ instance Show (GenTxId (ShelleyBlock era)) where
 applyShelleyTx :: forall era.
      ShelleyBasedEra era
   => LedgerConfig (ShelleyBlock era)
-  -> WhetherToForgive
+  -> WhetherToIntervene
   -> SlotNo
   -> GenTx (ShelleyBlock era)
   -> TickedLedgerState (ShelleyBlock era)
@@ -205,7 +205,7 @@ applyShelleyTx :: forall era.
        ( TickedLedgerState (ShelleyBlock era)
        , Validated (GenTx (ShelleyBlock era))
        )
-applyShelleyTx cfg wtf slot (ShelleyTx _ tx) st = do
+applyShelleyTx cfg wti slot (ShelleyTx _ tx) st = do
     (mempoolState', vtx) <-
        SL.applyTx
          (shelleyLedgerGlobals cfg)
@@ -213,8 +213,8 @@ applyShelleyTx cfg wtf slot (ShelleyTx _ tx) st = do
          (SL.mkMempoolState innerSt)
          tx
 
-    case wtf of
-      DoForgive | not (scriptsWereOK @era Proxy vtx) ->
+    case wti of
+      Intervene | not (scriptsWereOK @era Proxy vtx) ->
         throwError $ SL.ApplyTxError []   -- TODO what to put in this list?
       _ -> pure ()
 

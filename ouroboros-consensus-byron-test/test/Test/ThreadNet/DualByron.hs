@@ -276,7 +276,7 @@ instance TxGen DualByronBlock where
           tx <- genTx cfg st
           case runExcept $ applyTx
                              (configLedger cfg)
-                             DoNotForgive
+                             DoNotIntervene
                              curSlotNo
                              tx
                              st of
