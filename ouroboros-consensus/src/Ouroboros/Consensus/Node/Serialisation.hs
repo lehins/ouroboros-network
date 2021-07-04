@@ -36,8 +36,7 @@ import           Ouroboros.Network.Block (unwrapCBORinCBOR, wrapCBORinCBOR)
 import           Ouroboros.Network.Protocol.LocalStateQuery.Codec (Some (..))
 
 import           Ouroboros.Consensus.Block
-import           Ouroboros.Consensus.Ledger.SupportsMempool (ApplyTxErr,
-                     GenTxId)
+import           Ouroboros.Consensus.Ledger.SupportsMempool (GenTxId)
 import           Ouroboros.Consensus.Node.NetworkProtocolVersion
 import           Ouroboros.Consensus.TypeFamilyWrappers
 
@@ -149,10 +148,3 @@ instance SerialiseNodeToNode blk (GenTxId     blk)
       encodeNodeToNode cfg version h
   decodeNodeToNode cfg version =
       WrapGenTxId <$> decodeNodeToNode cfg version
-
-instance SerialiseNodeToClient blk (ApplyTxErr     blk)
-      => SerialiseNodeToClient blk (WrapApplyTxErr blk) where
-  encodeNodeToClient cfg version (WrapApplyTxErr h) =
-      encodeNodeToClient cfg version h
-  decodeNodeToClient cfg version =
-      WrapApplyTxErr <$> decodeNodeToClient cfg version

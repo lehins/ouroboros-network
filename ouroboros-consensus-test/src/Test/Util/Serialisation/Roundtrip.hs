@@ -52,8 +52,7 @@ import           Ouroboros.Consensus.Ledger.Abstract (LedgerState)
 import           Ouroboros.Consensus.Ledger.Query (BlockQuery, Query (..),
                      QueryVersion)
 import qualified Ouroboros.Consensus.Ledger.Query as Query
-import           Ouroboros.Consensus.Ledger.SupportsMempool (ApplyTxErr, GenTx,
-                     GenTxId)
+import           Ouroboros.Consensus.Ledger.SupportsMempool (GenTx, GenTxId)
 import           Ouroboros.Consensus.Node.NetworkProtocolVersion
 import           Ouroboros.Consensus.Node.Run (SerialiseNodeToClientConstraints,
                      SerialiseNodeToNodeConstraints (..))
@@ -61,6 +60,7 @@ import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Protocol.Abstract (ChainDepState)
 import           Ouroboros.Consensus.Storage.ChainDB (SerialiseDiskConstraints)
 import           Ouroboros.Consensus.Storage.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util (Dict (..))
 
 import           Test.Util.Orphans.Arbitrary ()
@@ -143,7 +143,7 @@ roundtrip_all
 
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) blk
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) (GenTx blk)
-     , ArbitraryWithVersion (BlockNodeToClientVersion blk) (ApplyTxErr blk)
+     , ArbitraryWithVersion (BlockNodeToClientVersion blk) (WrapApplyTxErr blk)
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) (SomeSecond BlockQuery blk)
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) (SomeResult blk)
      , ArbitraryWithVersion (QueryVersion, BlockNodeToClientVersion blk) (SomeSecond Query blk)
@@ -367,7 +367,7 @@ roundtrip_SerialiseNodeToClient
      , Show (BlockNodeToClientVersion blk)
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) blk
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) (GenTx blk)
-     , ArbitraryWithVersion (BlockNodeToClientVersion blk) (ApplyTxErr blk)
+     , ArbitraryWithVersion (BlockNodeToClientVersion blk) (WrapApplyTxErr blk)
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) (SomeSecond BlockQuery blk)
      , ArbitraryWithVersion (BlockNodeToClientVersion blk) (SomeResult blk)
      , ArbitraryWithVersion (QueryVersion, BlockNodeToClientVersion blk) (SomeSecond Query blk)
@@ -381,7 +381,7 @@ roundtrip_SerialiseNodeToClient
 roundtrip_SerialiseNodeToClient ccfg =
     [ rt (Proxy @blk)                         "blk"
     , rt (Proxy @(GenTx blk))                 "GenTx"
-    , rt (Proxy @(ApplyTxErr blk))            "ApplyTxErr"
+    , rt (Proxy @(WrapApplyTxErr blk))        "ApplyTxErr"
     , rt (Proxy @(SomeSecond BlockQuery blk)) "BlockQuery"
     , rtWith
         @(SomeSecond Query blk)

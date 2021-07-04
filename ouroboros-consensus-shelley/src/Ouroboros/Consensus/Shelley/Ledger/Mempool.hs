@@ -29,7 +29,7 @@ module Ouroboros.Consensus.Shelley.Ledger.Mempool (
   , perTxOverhead
   ) where
 
-import           Control.Monad.Except (Except, throwError)
+import           Control.Monad.Except (Except, withExcept)
 import           Control.Monad.Identity (Identity (..))
 import           Data.Foldable (toList)
 import           Data.Typeable (Typeable)
@@ -52,7 +52,7 @@ import qualified Cardano.Ledger.Era as SL (Crypto, TxInBlock, TxSeq, fromTxSeq)
 import qualified Shelley.Spec.Ledger.API as SL
 import qualified Shelley.Spec.Ledger.UTxO as SL (txid)
 
-import           Ouroboros.Consensus.Shelley.Eras (EraCrypto, scriptsWereOK)
+import           Ouroboros.Consensus.Shelley.Eras
 import           Ouroboros.Consensus.Shelley.Ledger.Block
 import           Ouroboros.Consensus.Shelley.Ledger.Ledger
 
@@ -79,11 +79,10 @@ deriving instance ShelleyBasedEra era => Show (Validated (GenTx (ShelleyBlock er
 
 instance Typeable era => ShowProxy (Validated (GenTx (ShelleyBlock era))) where
 
-type instance ApplyTxErr (ShelleyBlock era) = SL.ApplyTxError era
+type instance ApplyTxErr (ShelleyBlock era) = ShelleyApplyTxError era
 
 -- orphaned instance
 instance Typeable era => ShowProxy (SL.ApplyTxError era) where
-
 
 -- |'txInBlockSize' is used to estimate how many transactions we can grab from
 -- the Mempool to put into the block we are going to forge without exceeding
@@ -207,16 +206,12 @@ applyShelleyTx :: forall era.
        )
 applyShelleyTx cfg wti slot (ShelleyTx _ tx) st = do
     (mempoolState', vtx) <-
-       SL.applyTx
+       applyShelleyBasedTx
          (shelleyLedgerGlobals cfg)
          (SL.mkMempoolEnv   innerSt slot)
          (SL.mkMempoolState innerSt)
+         wti
          tx
-
-    case wti of
-      Intervene | not (scriptsWereOK @era Proxy vtx) ->
-        throwError $ SL.ApplyTxError []   -- TODO what to put in this list?
-      _ -> pure ()
 
     let st' = set theLedgerLens mempoolState' st
 
@@ -233,11 +228,12 @@ applyShelleyValidatedTx :: forall era.
   -> Except (ApplyTxErr (ShelleyBlock era)) (TickedLedgerState (ShelleyBlock era))
 applyShelleyValidatedTx cfg slot (ShelleyValidatedTx _ tx) st = do
     mempoolState' <-
-       SL.applyTxInBlock
-         (shelleyLedgerGlobals cfg)
-         (SL.mkMempoolEnv   innerSt slot)
-         (SL.mkMempoolState innerSt)
-         tx
+        withExcept (toShelleyApplyTxError (Proxy @era))
+      $ SL.applyTxInBlock
+          (shelleyLedgerGlobals cfg)
+          (SL.mkMempoolEnv   innerSt slot)
+          (SL.mkMempoolState innerSt)
+          tx
 
     pure $ set theLedgerLens mempoolState' st
   where

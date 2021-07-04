@@ -21,7 +21,6 @@ import           Cardano.Binary
 import           Cardano.Prelude (cborError)
 
 import qualified Cardano.Chain.Block as CC
-import qualified Cardano.Chain.Byron.API as CC
 
 import           Ouroboros.Network.Block (Serialised (..), unwrapCBORinCBOR,
                      wrapCBORinCBOR)
@@ -33,6 +32,7 @@ import           Ouroboros.Consensus.Node.Run
 import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Protocol.PBFT.State (PBftState)
 import           Ouroboros.Consensus.Storage.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 
 import           Ouroboros.Consensus.Byron.Ledger
 import           Ouroboros.Consensus.Byron.Ledger.Conversions
@@ -169,9 +169,9 @@ instance SerialiseNodeToClient ByronBlock (GenTx ByronBlock) where
   decodeNodeToClient _ _ = decodeByronGenTx
 
 -- | @'ApplyTxErr' 'ByronBlock'@
-instance SerialiseNodeToClient ByronBlock CC.ApplyMempoolPayloadErr where
-  encodeNodeToClient _ _ = encodeByronApplyTxError
-  decodeNodeToClient _ _ = decodeByronApplyTxError
+instance SerialiseNodeToClient ByronBlock (WrapApplyTxErr ByronBlock) where
+  encodeNodeToClient _ _ = encodeByronApplyTxError . unwrapApplyTxErr
+  decodeNodeToClient _ _ = WrapApplyTxErr <$> decodeByronApplyTxError
 
 instance SerialiseNodeToClient ByronBlock (SomeSecond BlockQuery ByronBlock) where
   encodeNodeToClient _ _ (SomeSecond q) = encodeByronQuery q

@@ -24,6 +24,7 @@ import           Ouroboros.Consensus.Node.Run
 import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Protocol.PBFT.State (PBftState)
 import           Ouroboros.Consensus.Storage.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 
 import           Ouroboros.Consensus.Byron.Ledger
 import           Ouroboros.Consensus.Byron.Node.Serialisation ()
@@ -159,9 +160,9 @@ instance SerialiseNodeToClient DualByronBlock (GenTx DualByronBlock) where
   decodeNodeToClient _ _ = decodeDualGenTx decodeByronGenTx
 
 -- | @'ApplyTxErr' 'DualByronBlock'@
-instance SerialiseNodeToClient DualByronBlock (DualGenTxErr ByronBlock ByronSpecBlock) where
-  encodeNodeToClient _ _ = encodeDualGenTxErr encodeByronApplyTxError
-  decodeNodeToClient _ _ = decodeDualGenTxErr decodeByronApplyTxError
+instance SerialiseNodeToClient DualByronBlock (WrapApplyTxErr DualByronBlock) where
+  encodeNodeToClient _ _ = encodeDualGenTxErr encodeByronApplyTxError . unwrapApplyTxErr
+  decodeNodeToClient _ _ = WrapApplyTxErr <$> decodeDualGenTxErr decodeByronApplyTxError
 
 instance SerialiseNodeToClient DualByronBlock (SomeSecond BlockQuery DualByronBlock) where
   encodeNodeToClient _ _ = \case {}

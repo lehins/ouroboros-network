@@ -73,6 +73,7 @@ import           Ouroboros.Consensus.Node.Run
 import           Ouroboros.Consensus.Node.Serialisation
 import qualified Ouroboros.Consensus.Node.Tracers as Node
 import           Ouroboros.Consensus.NodeKernel
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util (ShowProxy)
 import           Ouroboros.Consensus.Util.IOLike
 import           Ouroboros.Consensus.Util.Orphans ()
@@ -183,8 +184,8 @@ defaultCodecs ccfg version networkVersion = Codecs {
         codecLocalTxSubmission
           enc
           dec
-          enc
-          dec
+          (enc . WrapApplyTxErr @blk)
+          (unwrapApplyTxErr @blk <$> dec)
 
     , cStateQueryCodec =
         codecLocalStateQuery
@@ -235,8 +236,8 @@ clientCodecs ccfg version networkVersion = Codecs {
         codecLocalTxSubmission
           enc
           dec
-          enc
-          dec
+          (enc . WrapApplyTxErr @blk)
+          (unwrapApplyTxErr @blk <$> dec)
 
     , cStateQueryCodec =
         codecLocalStateQuery

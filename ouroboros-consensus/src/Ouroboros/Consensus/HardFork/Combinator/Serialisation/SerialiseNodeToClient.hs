@@ -34,6 +34,7 @@ import           Ouroboros.Consensus.Block
 import           Ouroboros.Consensus.Node.NetworkProtocolVersion
 import           Ouroboros.Consensus.Node.Run
 import           Ouroboros.Consensus.Node.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util ((.:))
 import           Ouroboros.Consensus.Util.SOP (ProofNonEmpty (..),
                      checkIsNonEmpty, isNonEmpty)
@@ -163,9 +164,9 @@ instance SerialiseHFC xs
   decodeNodeToClient = fmap (HardForkGenTx . OneEraGenTx) .: dispatchDecoder
 
 instance SerialiseHFC xs
-      => SerialiseNodeToClient (HardForkBlock xs) (HardForkApplyTxErr xs) where
-  encodeNodeToClient = dispatchEncoderErr `after` (fmap getOneEraApplyTxErr . hardForkApplyTxErrToEither)
-  decodeNodeToClient = fmap (hardForkApplyTxErrFromEither . fmap OneEraApplyTxErr) .: dispatchDecoderErr
+      => SerialiseNodeToClient (HardForkBlock xs) (WrapApplyTxErr (HardForkBlock xs)) where
+  encodeNodeToClient = dispatchEncoderErr `after` (fmap getOneEraApplyTxErr . hardForkApplyTxErrToEither . unwrapApplyTxErr)
+  decodeNodeToClient = fmap (WrapApplyTxErr . hardForkApplyTxErrFromEither . fmap OneEraApplyTxErr) .: dispatchDecoderErr
 
 {-------------------------------------------------------------------------------
   Queries

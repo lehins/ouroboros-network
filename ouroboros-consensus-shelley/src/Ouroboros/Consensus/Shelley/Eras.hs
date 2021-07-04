@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds               #-}
+{-# LANGUAGE EmptyCase               #-}
 {-# LANGUAGE FlexibleContexts        #-}
 {-# LANGUAGE FlexibleInstances       #-}
+{-# LANGUAGE LambdaCase              #-}
 {-# LANGUAGE MultiParamTypeClasses   #-}
 {-# LANGUAGE OverloadedStrings       #-}
 {-# LANGUAGE ScopedTypeVariables     #-}
@@ -23,19 +25,28 @@ module Ouroboros.Consensus.Shelley.Eras (
     -- * Shelley-based era
   , ShelleyBasedEra (..)
   , WrapTxInBlock (..)
+    -- ** Alonzo era
+  , AlonzoApplyTxError (..)
+  , AlonzoApplyTxWarning (..)
     -- * Type synonyms for convenience
   , EraCrypto
     -- * Re-exports
   , StandardCrypto
   ) where
 
+import qualified Codec.CBOR.Decoding as Dec
+import qualified Codec.CBOR.Encoding as Enc
+import           Control.Monad.Except
 import           Data.Default.Class (Default)
+import           Data.Proxy (Proxy (..))
 import           Data.Text (Text)
+import           Data.Typeable (Typeable)
+import           Data.Void (Void)
 import           GHC.Records
 import           NoThunks.Class (NoThunks)
 import           Numeric.Natural (Natural)
 
-import           Cardano.Binary (FromCBOR, ToCBOR)
+import           Cardano.Binary (FromCBOR (..), ToCBOR (..), enforceSize)
 
 import           Cardano.Ledger.Allegra (AllegraEra)
 import           Cardano.Ledger.Allegra.Translation ()
@@ -55,6 +66,10 @@ import           Cardano.Ledger.Shelley (ShelleyEra)
 import           Cardano.Ledger.ShelleyMA ()
 import           Control.State.Transition (State)
 import qualified Shelley.Spec.Ledger.API as SL
+
+import           Ouroboros.Consensus.Ledger.SupportsMempool
+                     (WhetherToIntervene (..))
+import           Ouroboros.Consensus.Util (ShowProxy (..))
 
 {-------------------------------------------------------------------------------
   Eras instantiated with standard crypto
@@ -133,34 +148,161 @@ class ( SL.ShelleyBasedEra era
 
       , ToCBOR (Core.Witnesses era)
 
+      , Eq (ShelleyApplyTxError era)
+      , FromCBOR (ShelleyApplyTxError era)
+      , Show (ShelleyApplyTxError era)
+      , ShowProxy (ShelleyApplyTxError era)
+      , ToCBOR (ShelleyApplyTxError era)
       ) => ShelleyBasedEra era where
+  type ShelleyApplyTxError era
+
   -- | Return the name of the Shelley-based era, e.g., @"Shelley"@, @"Allegra"@,
   -- etc.
   shelleyBasedEraName :: proxy era -> Text
 
-  scriptsWereOK :: proxy era -> Core.TxInBlock era -> Bool
+  toShelleyApplyTxError :: proxy era -> SL.ApplyTxError era -> ShelleyApplyTxError era
 
-instance SL.PraosCrypto c => ShelleyBasedEra (ShelleyEra c) where
+  applyShelleyBasedTx ::
+       SL.Globals
+    -> SL.LedgerEnv    era
+    -> SL.MempoolState era
+    -> WhetherToIntervene
+    -> SL.Tx           era
+    -> Except
+         (ShelleyApplyTxError era)
+         ( SL.MempoolState era
+         , TxInBlock       era
+         )
+
+-- | The default implementation of 'applyShelleyBasedTx', a thin wrapper around
+-- 'SL.applyTx'
+defaultApplyShelleyBasedTx :: forall era.
+     ShelleyBasedEra era
+  => SL.Globals
+  -> SL.LedgerEnv    era
+  -> SL.MempoolState era
+  -> WhetherToIntervene
+  -> SL.Tx           era
+  -> Except
+       (ShelleyApplyTxError era)
+       ( SL.MempoolState era
+       , TxInBlock       era
+       )
+defaultApplyShelleyBasedTx globals ledgerEnv mempoolState _wti tx =
+      withExcept (toShelleyApplyTxError (Proxy @era))
+    $ SL.applyTx
+        globals
+        ledgerEnv
+        mempoolState
+        tx
+
+instance (SL.PraosCrypto c, ShowProxy (SL.ApplyTxError (ShelleyEra c))) => ShelleyBasedEra (ShelleyEra c) where
+  type ShelleyApplyTxError (ShelleyEra c) = SL.ApplyTxError (ShelleyEra c)
+
   shelleyBasedEraName _ = "Shelley"
 
-  scriptsWereOK _ _ = True
+  toShelleyApplyTxError _prx = id
 
-instance SL.PraosCrypto c => ShelleyBasedEra (AllegraEra c) where
+  applyShelleyBasedTx = defaultApplyShelleyBasedTx
+
+instance (SL.PraosCrypto c, ShowProxy (SL.ApplyTxError (AllegraEra c))) => ShelleyBasedEra (AllegraEra c) where
+  type ShelleyApplyTxError (AllegraEra c) = SL.ApplyTxError (AllegraEra c)
+
   shelleyBasedEraName _ = "Allegra"
 
-  scriptsWereOK _ _ = True
+  toShelleyApplyTxError _prx = id
 
-instance SL.PraosCrypto c => ShelleyBasedEra (MaryEra c) where
+  applyShelleyBasedTx = defaultApplyShelleyBasedTx
+
+instance (SL.PraosCrypto c, ShowProxy (SL.ApplyTxError (MaryEra c))) => ShelleyBasedEra (MaryEra c) where
+  type ShelleyApplyTxError (MaryEra c) = SL.ApplyTxError (MaryEra c)
+
   shelleyBasedEraName _ = "Mary"
 
-  scriptsWereOK _ _ = True
+  toShelleyApplyTxError _prx = id
+
+  applyShelleyBasedTx = defaultApplyShelleyBasedTx
 
 instance SL.PraosCrypto c => ShelleyBasedEra (AlonzoEra c) where
+  type ShelleyApplyTxError (AlonzoEra c) = AlonzoApplyTxError c
+
   shelleyBasedEraName _ = "Alonzo"
 
-  scriptsWereOK _ vtx = b
-    where
-      Alonzo.IsValidating b = Alonzo.isValidating vtx
+  toShelleyApplyTxError _prx = AlonzoApplyTxErrorProper
+
+  applyShelleyBasedTx globals ledgerEnv mempoolState wti tx = do
+      (mempoolState', vtx) <- defaultApplyShelleyBasedTx
+        globals
+        ledgerEnv
+        mempoolState
+        wti
+        tx
+
+      let Alonzo.IsValidating scriptsOK = Alonzo.isValidating vtx
+      case wti of
+        Intervene | not scriptsOK ->
+            throwError
+          $ AlonzoApplyTxErrorPromotedWarning
+          $ AlonzoPlutusErrors []
+        _ -> pure ()
+
+      pure (mempoolState', vtx)
+
+-- | An /error/ arising from applying an Alonzo transaction
+data AlonzoApplyTxError c
+  -- | The transaction is invalid
+  = AlonzoApplyTxErrorProper          !(SL.ApplyTxError (AlonzoEra c))
+  -- | The transaction is valid, but it has warnings that were promoted to
+  -- errors as part of an intervention
+  --
+  -- See 'WhetherToIntervene'.
+  | AlonzoApplyTxErrorPromotedWarning !AlonzoApplyTxWarning
+  deriving (Eq, Show)
+
+instance Typeable c => ShowProxy (AlonzoApplyTxError c) where
+
+instance SL.PraosCrypto c => ToCBOR (AlonzoApplyTxError c) where
+  toCBOR = \case
+    AlonzoApplyTxErrorProper err -> mconcat [
+        Enc.encodeListLen 2
+      , Enc.encodeWord8 0
+      , toCBOR err
+      ]
+    AlonzoApplyTxErrorPromotedWarning warn -> mconcat [
+        Enc.encodeListLen 2
+      , Enc.encodeWord8 1
+      , toCBOR warn
+      ]
+
+instance SL.PraosCrypto c => FromCBOR (AlonzoApplyTxError c) where
+  fromCBOR = do
+    enforceSize "AlonzoApplyTxError" 2
+    Dec.decodeWord8 >>= \case
+      0   -> AlonzoApplyTxErrorProper          <$> fromCBOR
+      1   -> AlonzoApplyTxErrorPromotedWarning <$> fromCBOR
+      tag -> fail $  "fromCBOR @AlonzoApplyTxError: unexpected tag " <> show tag
+
+-- | A /warning/ arising from applying an Alonzo transaction
+data AlonzoApplyTxWarning
+    -- | TODO eventually the Alonzo ledger interface will provide details of
+    -- the Plutus failure; Void for now ensures the empty list
+  = AlonzoPlutusErrors [Void]
+  deriving (Eq, Show)
+
+instance ToCBOR AlonzoApplyTxWarning where
+  toCBOR = \case
+    AlonzoPlutusErrors errs -> mconcat [
+        Enc.encodeListLen 2
+      , Enc.encodeWord8 0
+      , toCBOR errs
+      ]
+
+instance FromCBOR AlonzoApplyTxWarning where
+  fromCBOR = do
+    enforceSize "AlonzoApplyTxWarning" 2
+    Dec.decodeWord8 >>= \case
+      0   -> AlonzoPlutusErrors <$> fromCBOR
+      tag -> fail $  "fromCBOR @AlonzoApplyTxWarning: unexpected tag " <> show tag
 
 {-------------------------------------------------------------------------------
   TxInBlock wrapper

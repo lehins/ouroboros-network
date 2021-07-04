@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -21,10 +22,11 @@ import           Ouroboros.Consensus.Ledger.SupportsMempool (GenTxId)
 import           Ouroboros.Consensus.Node.Run
 import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Storage.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 
 import qualified Shelley.Spec.Ledger.API as SL
 
-import           Ouroboros.Consensus.Shelley.Eras (EraCrypto)
+import           Ouroboros.Consensus.Shelley.Eras
 import           Ouroboros.Consensus.Shelley.Ledger
 import           Ouroboros.Consensus.Shelley.Ledger.NetworkProtocolVersion ()
 import           Ouroboros.Consensus.Shelley.Protocol
@@ -145,10 +147,9 @@ instance ShelleyBasedEra era => SerialiseNodeToClient (ShelleyBlock era) (GenTx 
   encodeNodeToClient _ _ = toCBOR
   decodeNodeToClient _ _ = fromCBOR
 
--- | @'ApplyTxErr' '(ShelleyBlock era)'@
-instance ShelleyBasedEra era => SerialiseNodeToClient (ShelleyBlock era) (SL.ApplyTxError era) where
-  encodeNodeToClient _ _ = toCBOR
-  decodeNodeToClient _ _ = fromCBOR
+instance ShelleyBasedEra era => SerialiseNodeToClient (ShelleyBlock era) (WrapApplyTxErr (ShelleyBlock era)) where
+  encodeNodeToClient _ _ = toCBOR . unwrapApplyTxErr
+  decodeNodeToClient _ _ = WrapApplyTxErr <$> fromCBOR
 
 instance ShelleyBasedEra era
       => SerialiseNodeToClient (ShelleyBlock era) (SomeSecond BlockQuery (ShelleyBlock era)) where

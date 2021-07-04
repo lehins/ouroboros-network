@@ -71,6 +71,7 @@ import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Protocol.Abstract (ChainDepState)
 import           Ouroboros.Consensus.Storage.Serialisation (EncodeDisk (..),
                      SerialisedHeader)
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util.CBOR (decodeAsFlatTerm)
 import           Ouroboros.Consensus.Util.Condense (Condense (..))
 
@@ -440,7 +441,7 @@ goldenTest_SerialiseNodeToClient codecConfig goldenDir Examples {..} =
           test "Block"           exampleBlock           enc'
         , test "SerialisedBlock" exampleSerialisedBlock enc'
         , test "GenTx"           exampleGenTx           enc'
-        , test "ApplyTxErr"      exampleApplyTxErr      enc'
+        , test "ApplyTxErr"      exampleApplyTxErr      (enc' . WrapApplyTxErr @blk)
         , test "Query"           exampleQuery           enc'
         , test "Result"          exampleResult          encRes
         ]

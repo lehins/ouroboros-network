@@ -60,7 +60,7 @@ codecConfig :: CodecConfig (ShelleyBlock Ouroboros.Consensus.Shelley.Eras.Standa
 codecConfig = ShelleyCodecConfig
 
 fromShelleyLedgerExamples
-  :: ShelleyBasedEra era
+  :: forall era. ShelleyBasedEra era
   => ShelleyLedgerExamples era
   -> Golden.Examples (ShelleyBlock era)
 fromShelleyLedgerExamples ShelleyLedgerExamples {
@@ -74,7 +74,10 @@ fromShelleyLedgerExamples ShelleyLedgerExamples {
     , exampleHeaderHash       = unlabelled hash
     , exampleGenTx            = unlabelled tx
     , exampleGenTxId          = unlabelled $ txId tx
-    , exampleApplyTxErr       = unlabelled sleApplyTxError
+    , exampleApplyTxErr       =
+          unlabelled
+        $ toShelleyApplyTxError (Proxy :: Proxy era)
+        $ sleApplyTxError
     , exampleQuery            = queries
     , exampleResult           = results
     , exampleAnnTip           = unlabelled annTip

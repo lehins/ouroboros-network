@@ -431,14 +431,14 @@ instance c ~ MockCryptoCompatByron
 
 instance c ~ MockCryptoCompatByron
       => Arbitrary (WithVersion (HardForkNodeToClientVersion (CardanoEras c))
-                                (CardanoApplyTxErr c)) where
-  arbitrary = frequency
+                                (WrapApplyTxErr (CardanoBlock c))) where
+  arbitrary = fmap WrapApplyTxErr <$> frequency
       [ (8, arbitraryNodeToClient ApplyTxErrByron ApplyTxErrShelley ApplyTxErrAllegra ApplyTxErrMary ApplyTxErrAlonzo)
       , (2, WithVersion
               <$> (getHardForkEnabledNodeToClientVersion <$> arbitrary)
               <*> (HardForkApplyTxErrWrongEra <$> arbitrary))
       ]
-  shrink = traverse aux
+  shrink = map (fmap WrapApplyTxErr) . traverse aux . fmap unwrapApplyTxErr
     where
       aux :: CardanoApplyTxErr MockCryptoCompatByron
          -> [CardanoApplyTxErr MockCryptoCompatByron]

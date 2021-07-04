@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PatternSynonyms       #-}
@@ -14,6 +15,8 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Test.Consensus.Shelley.Generators (SomeResult (..)) where
 
+import           Data.Void
+
 import           Ouroboros.Network.Block (mkSerialised)
 
 import           Ouroboros.Consensus.Block
@@ -24,6 +27,7 @@ import           Ouroboros.Consensus.Ledger.SupportsMempool
 
 import qualified Shelley.Spec.Ledger.API as SL
 
+import           Ouroboros.Consensus.Shelley.Eras
 import           Ouroboros.Consensus.Shelley.Ledger
 import           Ouroboros.Consensus.Shelley.Protocol (PraosCrypto,
                      TPraosState (..))
@@ -37,6 +41,7 @@ import           Test.Util.Serialisation.Roundtrip (Coherent (..),
 
 import           Test.Cardano.Ledger.AllegraEraGen ()
 import           Test.Cardano.Ledger.Alonzo.AlonzoEraGen ()
+import           Test.Cardano.Ledger.Alonzo.Serialisation.Generators ()
 import           Test.Cardano.Ledger.MaryEraGen ()
 import           Test.Cardano.Ledger.ShelleyMA.Serialisation.Generators ()
 import           Test.Consensus.Shelley.MockCrypto (CanMock)
@@ -151,6 +156,20 @@ instance Arbitrary ShelleyNodeToClientVersion where
 instance ShelleyBasedEra era
       => Arbitrary (SomeSecond (NestedCtxt f) (ShelleyBlock era)) where
   arbitrary = return (SomeSecond indexIsTrivial)
+
+instance CanMock (AlonzoEra c) => Arbitrary (AlonzoApplyTxError c) where
+  arbitrary = frequency [
+        (9, AlonzoApplyTxErrorProper <$> arbitrary)
+      , (1, pure $ AlonzoApplyTxErrorPromotedWarning $ AlonzoPlutusErrors [])
+      ]
+
+  shrink = \case
+     AlonzoApplyTxErrorProper errs ->
+       AlonzoApplyTxErrorProper <$> shrink errs
+     AlonzoApplyTxErrorPromotedWarning (AlonzoPlutusErrors warns) ->
+       case warns of
+         []     -> []
+         warn:_ -> absurd warn
 
 {-------------------------------------------------------------------------------
   Generators for cardano-ledger-specs

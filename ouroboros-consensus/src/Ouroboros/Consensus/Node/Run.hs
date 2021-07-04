@@ -33,6 +33,7 @@ import           Ouroboros.Consensus.Ledger.SupportsProtocol
 import           Ouroboros.Consensus.Node.InitStorage
 import           Ouroboros.Consensus.Node.NetworkProtocolVersion
 import           Ouroboros.Consensus.Node.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util (ShowProxy)
 
 import           Ouroboros.Consensus.Storage.ChainDB
@@ -71,7 +72,7 @@ class ( Typeable blk
       , SerialiseNodeToClient blk blk
       , SerialiseNodeToClient blk (Serialised blk)
       , SerialiseNodeToClient blk (GenTx blk)
-      , SerialiseNodeToClient blk (ApplyTxErr blk)
+      , SerialiseNodeToClient blk (WrapApplyTxErr blk)
       , SerialiseNodeToClient blk (SomeSecond BlockQuery blk)
       , SerialiseResult       blk (BlockQuery blk)
       ) => SerialiseNodeToClientConstraints blk

@@ -29,6 +29,7 @@ import           Ouroboros.Consensus.Mock.Ledger
 import           Ouroboros.Consensus.Mock.Node.Abstract
 import           Ouroboros.Consensus.Node.Run
 import           Ouroboros.Consensus.Node.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 
 import           Ouroboros.Consensus.Storage.Serialisation
 
@@ -107,7 +108,10 @@ instance Serialise ext => SerialiseNodeToClient (MockBlock ext) (MockBlock ext) 
 
 instance SerialiseNodeToClient (MockBlock ext) (Serialised (MockBlock ext))
 instance SerialiseNodeToClient (MockBlock ext) (GenTx (MockBlock ext))
-instance SerialiseNodeToClient (MockBlock ext) (MockError (MockBlock ext))
+
+instance SerialiseNodeToClient (MockBlock ext) (WrapApplyTxErr (MockBlock ext)) where
+  encodeNodeToClient _ccfg _version = encode . unwrapApplyTxErr
+  decodeNodeToClient _ccfg _version = WrapApplyTxErr <$> decode
 
 instance SerialiseNodeToClient (MockBlock ext) (SomeSecond BlockQuery (MockBlock ext)) where
   encodeNodeToClient _ _ (SomeSecond QueryLedgerTip) = encode ()

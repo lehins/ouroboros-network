@@ -401,6 +401,10 @@ instance SerialiseResult ByronToCardano (BlockQuery ByronToCardano) where
                                       Crypto
                                       (CardanoQueryResult Crypto result))
 
+instance SerialiseNodeToClient ByronToCardano (WrapApplyTxErr ByronToCardano) where
+  encodeNodeToClient cfg version = encodeNodeToClient cfg version . unwrapApplyTxErr
+  decodeNodeToClient cfg version = WrapApplyTxErr <$> decodeNodeToClient cfg version
+
 instance SerialiseNodeToClientConstraints ByronToCardano
 
 {------------------------------------------------------------------------------
@@ -674,6 +678,10 @@ instance SerialiseNodeToClient CardanoToByron (SomeSecond BlockQuery CardanoToBy
       decodeNodeToClientC2B
         (Proxy @(SomeSecond BlockQuery))
         (\(SomeSecond q) -> SomeSecond (QueryC2B q))
+
+instance SerialiseNodeToClient CardanoToByron (WrapApplyTxErr CardanoToByron) where
+  encodeNodeToClient cfg version = encodeNodeToClient cfg version . unwrapApplyTxErr
+  decodeNodeToClient cfg version = WrapApplyTxErr <$> decodeNodeToClient cfg version
 
 instance SerialiseResult CardanoToByron (BlockQuery CardanoToByron) where
   encodeResult (CodecConfigC2B ccfg) () (QueryC2B q) (r :: result) =

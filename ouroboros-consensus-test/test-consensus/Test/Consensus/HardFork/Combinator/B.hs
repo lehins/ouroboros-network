@@ -44,6 +44,8 @@ import           Data.Void
 import           GHC.Generics (Generic)
 import           NoThunks.Class (NoThunks, OnlyCheckWhnfNamed (..))
 
+import           Cardano.Binary
+
 import           Test.Util.Time (dawnOfTime)
 
 import           Ouroboros.Network.Block (Serialised, unwrapCBORinCBOR,
@@ -74,6 +76,7 @@ import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Protocol.Abstract
 import           Ouroboros.Consensus.Storage.ImmutableDB (simpleChunkInfo)
 import           Ouroboros.Consensus.Storage.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util.Condense
 import           Ouroboros.Consensus.Util.Orphans ()
 
@@ -433,3 +436,7 @@ instance SerialiseNodeToClient BlockB (SomeSecond BlockQuery BlockB) where
 instance SerialiseResult BlockB (BlockQuery BlockB) where
   encodeResult _ _ = \case {}
   decodeResult _ _ = \case {}
+
+instance SerialiseNodeToClient BlockB (WrapApplyTxErr BlockB) where
+  encodeNodeToClient _ _ = toCBOR . unwrapApplyTxErr
+  decodeNodeToClient _ _ = WrapApplyTxErr <$> fromCBOR

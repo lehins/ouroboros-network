@@ -53,6 +53,7 @@ import           Data.Word
 import           GHC.Generics (Generic)
 import           NoThunks.Class (NoThunks, OnlyCheckWhnfNamed (..))
 
+import           Cardano.Binary
 import           Cardano.Slotting.EpochInfo
 
 import           Test.Util.Time (dawnOfTime)
@@ -87,6 +88,7 @@ import           Ouroboros.Consensus.Node.Serialisation
 import           Ouroboros.Consensus.Protocol.Abstract
 import           Ouroboros.Consensus.Storage.ImmutableDB (simpleChunkInfo)
 import           Ouroboros.Consensus.Storage.Serialisation
+import           Ouroboros.Consensus.TypeFamilyWrappers
 import           Ouroboros.Consensus.Util (repeatedlyM, (.:))
 import           Ouroboros.Consensus.Util.Condense
 import           Ouroboros.Consensus.Util.Orphans ()
@@ -561,9 +563,9 @@ instance SerialiseNodeToClient BlockA BlockA
 instance SerialiseNodeToClient BlockA (Serialised BlockA)
 instance SerialiseNodeToClient BlockA (GenTx BlockA)
 
-instance SerialiseNodeToClient BlockA Void where
-  encodeNodeToClient _ _ = absurd
-  decodeNodeToClient _ _ = fail "no ApplyTxErr to be decoded"
+instance SerialiseNodeToClient BlockA (WrapApplyTxErr BlockA) where
+  encodeNodeToClient _ _ = toCBOR . unwrapApplyTxErr
+  decodeNodeToClient _ _ = WrapApplyTxErr <$> fromCBOR
 
 instance SerialiseNodeToClient BlockA (SomeSecond BlockQuery BlockA) where
   encodeNodeToClient _ _ = \case {}
